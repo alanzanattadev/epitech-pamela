@@ -4,10 +4,15 @@ import subprocess
 import json
 from subprocess import call
 import random
+import sys
 
 def execShellCommand(command):
     if 'PAM_TYPE' in os.environ:
-        return subprocess.check_output(command, shell=True)
+		output = subprocess.check_output(command, shell=True)
+        if type(output) is type(b''):
+			return output.decode(sys.stdout.encoding)
+		else:
+			return output
     else:
         print(command)
 
@@ -58,12 +63,17 @@ def createContainer(partition, username):
 
 def getGroupNameOfUser(username):
     name = execShellCommand("id -g -n " + username)
-    return name or "alan"
+	if name is not None:
+		if name[-1] == '\n':
+			name = name[:-1]
+		return name
+	else:
+		return "alan"
 
 def openContainer(partition, username):
     execShellCommand("mkdir -p /home/" + username + "/secret")
     execShellCommand("mount -t ext3 /dev/mapper/" + username + " /home/" + username + "/secret")
-    execShellCommand("chown -R " + username + ":" + getGroupNameOfUser(username))
+    execShellCommand("chown -R " + username + ":" + getGroupNameOfUser(username) + " /home/" + username + "/secret")
 
 def getNewPartition(username, containersPath):
     execShellCommand("mkdir -p " + containersPath)
@@ -121,7 +131,7 @@ def closeSession(username):
 
 if 'PAM_TYPE' in os.environ and os.environ['PAM_TYPE'] == "open_session":
     openSession(os.environ['PAM_USER'])
-elif 'PAM_TYPE' in os.environ and os.environ['PAM_TYPE' == "close_session"]:
+elif 'PAM_TYPE' in os.environ and os.environ['PAM_TYPE'] == "close_session":
     closeSession(os.environ['PAM_USER'])
 else:
     openSession(os.environ['PAM_USER'], "./configuration.test.json", "./", "./")
