@@ -8,11 +8,11 @@ import sys
 
 def execShellCommand(command):
     if 'PAM_TYPE' in os.environ:
-		output = subprocess.check_output(command, shell=True)
+        output = subprocess.check_output(command, shell=True)
         if type(output) is type(b''):
-			return output.decode(sys.stdout.encoding)
-		else:
-			return output
+            return output.decode(sys.stdout.encoding)
+        else:
+            return output
     else:
         print(command)
 
@@ -63,12 +63,12 @@ def createContainer(partition, username):
 
 def getGroupNameOfUser(username):
     name = execShellCommand("id -g -n " + username)
-	if name is not None:
-		if name[-1] == '\n':
-			name = name[:-1]
-		return name
-	else:
-		return "alan"
+    if name is not None:
+        if name[-1] == '\n':
+            name = name[:-1]
+        return name
+    else:
+        return "alan"
 
 def openContainer(partition, username):
     execShellCommand("mkdir -p /home/" + username + "/secret")
@@ -96,6 +96,9 @@ def savePassword(username, password, keysPath):
 def getPasswordSize():
     return 128
 
+def isAlreadyOpened(username):
+    return os.path.exists("/home/" + username + "/secret")
+
 def readPasswordOfUser(userConfig):
     passwordPath = getPasswordPathInUserConfiguration(userConfig)
     with open(passwordPath, 'r') as data_file:
@@ -103,27 +106,30 @@ def readPasswordOfUser(userConfig):
 
 def openSession(username, configurationPath = "/etc/encrypted_containers.conf.json", containersPath = "/containers/", keysPath = "/keys/"):
     configuration = getConfiguration(configurationPath)
-    userConfig = getUserConfiguration(configuration, username)
-    partition = None
-    if userConfig == None:
-        partition = getNewPartition(username, containersPath)
-        password = generatePassword()
-        passwordPath = savePassword(username, password, keysPath)
-        formatLuks(partition, username, password)
-        openLuks(partition, username, password)
-        createContainer(partition, username)
-        addUserConfiguration(configuration, username, partition, passwordPath)
-        saveConfiguration(configuration, configurationPath)
-    else:
-        partition = getPartitionInUserConfiguration(userConfig)
-        password = readPasswordOfUser(userConfig)
-        openLuks(partition, username, password)
-    openContainer(partition, username)
-    print("opened")
+    if isAlreadyOpened(username) == False:
+        userConfig = getUserConfiguration(configuration, username)
+        partition = None
+        if userConfig == None:
+            partition = getNewPartition(username, containersPath)
+            password = generatePassword()
+            passwordPath = savePassword(username, password, keysPath)
+            formatLuks(partition, username, password)
+            openLuks(partition, username, password)
+            createContainer(partition, username)
+            addUserConfiguration(configuration, username, partition, passwordPath)
+            saveConfiguration(configuration, configurationPath)
+        else:
+            partition = getPartitionInUserConfiguration(userConfig)
+            password = readPasswordOfUser(userConfig)
+            openLuks(partition, username, password)
+        openContainer(partition, username)
+        print("opened")
 
 def closeContainer(username):
-    execShellCommand("umount /home/" + username + "/secret")
-    execShellCommand("cryptsetup luksClose " + username)
+    if isAlreadyOpened(username):
+        execShellCommand("umount /home/" + username + "/secret")
+        execShellCommand("rm -rf /home/" + username + "/secret")
+        execShellCommand("cryptsetup luksClose " + username)
 
 def closeSession(username):
     closeContainer(username)
